@@ -2,6 +2,7 @@ import math
 import random
 import numpy as np
 import pygame
+import time
 
 
 class Player:
@@ -321,9 +322,12 @@ class GameEnv:
     def loop(self):
         running = True
         action = 0
+        totalReward = 0
         while running:
+
             if(self.done):
                 running = False
+                break
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -345,11 +349,13 @@ class GameEnv:
                 if event.type == pygame.QUIT:
                     running = False
             state, reward, done = self.step(action)
-            # if(done):
-            #     running = False
+            totalReward += reward
+        print("tpt", totalReward)
+        # if(done):
+        #     running = False
 
     def step(self, action, finishGame=False):
-        reward = 0
+        reward = 0.2
         if(finishGame):
             state = self.getGameState()
             pygame.quit()
@@ -372,6 +378,7 @@ class GameEnv:
         if action == 3:
             if not self.playerBullet.show:
                 # Get the current x cordinate of the spaceship
+                reward = 0.6
                 self.playerBullet.x = self.player.getShootPosX()
                 self.playerBullet.show = True
 
@@ -446,8 +453,3 @@ class GameEnv:
         if(self.done):
             pygame.quit()
         return self.getGameState(), reward, self.done
-
-
-env = GameEnv()
-env.reset()
-env.loop()
