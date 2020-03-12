@@ -173,7 +173,7 @@ class EnemyBlock:
     def moveAnchor(self):
         # get limits
         mostLeftX, mostRightX, mostBottomY = self.getEdges()
-        # print(mostLeftX, mostRightX, mostBottomY)
+
         if(mostLeftX < 0):
             self.moveXVector = self.moveXSpeed
             self.anchorY += self.moveYVector
@@ -200,7 +200,7 @@ class EnemyBlock:
         # move bullet
         if(self.enemyBullet.show):
             # moving bullet
-            # print("moving bullet", self.enemyBullet.x, self.enemyBullet.y)
+
             self.enemyBullet.y += self.enemyBulletSpeed
             self.enemyBullet.draw()
             # check collisions with player
