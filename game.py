@@ -4,6 +4,9 @@ import numpy as np
 import pygame
 import time
 
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
+
 
 class Player:
     def __init__(self, screen):
@@ -21,6 +24,9 @@ class Player:
 
     def draw(self):
         self.screen.blit(self.img, (self.x, self.y))
+
+    def getState(self):
+        return np.array([self.x/WINDOW_WIDTH, self.y/WINDOW_HEIGHT])
 
 
 class Bullet:
@@ -42,7 +48,7 @@ class Bullet:
 
     def getState(self):
         show = 1 if self.show else 0
-        return np.array([show, self.x, self.y])
+        return np.array([show, self.x/WINDOW_WIDTH, self.y/WINDOW_HEIGHT])
 
 
 class Enemy:
@@ -58,7 +64,7 @@ class Enemy:
 
     def getState(self):
         alive = 1 if self.alive else 0
-        return np.array([alive, self.x, self.y])
+        return np.array([alive, self.x/WINDOW_WIDTH, self.y/WINDOW_HEIGHT])
 
     def collided(self, bulletX, bulletY):
         enemyCenterX = self.x+self.enemyImg.get_size()[0]/2
@@ -268,7 +274,7 @@ class GameEnv:
         state = np.append(state, bulletState)
 
         # playerstates
-        playerState = [self.player.x/self.gWidth, self.player.y/self.gWidth]
+        playerState = self.player.getState()
         state = np.append(state, playerState)
 
         return state
@@ -355,7 +361,7 @@ class GameEnv:
         #     running = False
 
     def step(self, action, finishGame=False):
-        reward = 0.2
+        reward = -0.1
         if(finishGame):
             state = self.getGameState()
             pygame.quit()
@@ -417,7 +423,7 @@ class GameEnv:
             # explosionSound.play()
             self.playerBullet.y = self.player.y
             self.playerBullet.show = False
-            reward = 1
+            reward = 2
             self.score_value += 1
 
         # # Bullet Movement
