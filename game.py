@@ -141,8 +141,13 @@ class EnemyBlock:
         for i in range(self.num):
             if(self.enemies[i].y == mostBottomY and self.enemies[i].alive):
                 bottomXs.append(self.enemies[i].x+self.enemyXsize/2)
-
-        enemyBulletX = random.sample(bottomXs, 1)[0]
+        if(len(bottomXs) == 0):
+            return
+        try:
+            enemyBulletX = random.sample(bottomXs, 1)[0]
+        except ValueError:
+            print("Booom", len(bottomXs))
+            raise Exception('spam', 'eggs')
         enemyBulletY = mostBottomY + self.enemyYsize
 
         self.enemyBullet.x = enemyBulletX
@@ -165,7 +170,7 @@ class EnemyBlock:
 
     def playerShot(self, x, y):
         if(self.enemyBullet.y >= y-self.enemyBulletSizeX and self.enemyBullet.x < x + self.enemyBulletSizeX and self.enemyBullet.x > x):
-            print("mayday1", self.enemyBullet.y, y)
+            print("mayday")
             return True
         return False
 
@@ -218,8 +223,11 @@ class EnemyBlock:
 
         else:
             # print("shoting")
-            self.enemyBullet.show = True
-            self.shoot()
+            if(not self.allDead()):
+                self.enemyBullet.show = True
+                self.shoot()
+            else:
+                print("all dead")
 
     def creatEnemies(self):
 
@@ -267,6 +275,7 @@ class GameEnv:
         state = np.array([])
         # enemy states
         enemyBlockState = self.enemyBlock.getState()
+
         state = np.append(state, enemyBlockState)
 
         # playerBullet
@@ -311,13 +320,14 @@ class GameEnv:
 
         # Score
         self.score_value = 0
+        self.totalReward = 0
         return self.getGameState()
 
     def player(self, x, y):
         self.screen.blit(self.playerImg, (x, y))
 
     def show_score(self, x, y):
-        score = self.font.render("Score : " + str(self.score_value),
+        score = self.font.render(f"Score : {self.score_value} reward {self.totalReward}",
                                  True, (255, 255, 255))
         self.screen.blit(score, (x, y))
 
@@ -354,14 +364,15 @@ class GameEnv:
 
                 if event.type == pygame.QUIT:
                     running = False
-            state, reward, done = self.step(action)
+            state, reward, done, win = self.step(action)
             totalReward += reward
         print("tpt", totalReward)
         # if(done):
         #     running = False
 
     def step(self, action, finishGame=False):
-        reward = -0.1
+        reward = -0.001
+        win = 0
         if(finishGame):
             state = self.getGameState()
             pygame.quit()
@@ -384,7 +395,7 @@ class GameEnv:
         if action == 3:
             if not self.playerBullet.show:
                 # Get the current x cordinate of the spaceship
-                reward = 0.6
+
                 self.playerBullet.x = self.player.getShootPosX()
                 self.playerBullet.show = True
 
@@ -393,7 +404,7 @@ class GameEnv:
 
         self.screen.fill((0, 0, 0))
         # Background Image
-        self.screen.blit(self.background, (0, 0))
+        #self.screen.blit(self.background, (0, 0))
 
         # if keystroke is pressed check whether its right or left
 
@@ -423,7 +434,7 @@ class GameEnv:
             # explosionSound.play()
             self.playerBullet.y = self.player.y
             self.playerBullet.show = False
-            reward = 2
+            reward = 3.0/self.enemyBlock.num
             self.score_value += 1
 
         # # Bullet Movement
@@ -441,6 +452,7 @@ class GameEnv:
             reward = 3
             running = False
             self.done = True
+            win = 1
             print("gracefull win")
         else:
             invasion = self.enemyBlock.enemyInvasion()
@@ -458,4 +470,5 @@ class GameEnv:
         pygame.display.update()
         if(self.done):
             pygame.quit()
-        return self.getGameState(), reward, self.done
+        self.totalReward += reward
+        return self.getGameState(), reward, self.done, win

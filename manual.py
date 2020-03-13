@@ -1,9 +1,14 @@
 from game import GameEnv
 import random
 
-env = GameEnv()
+env = GameEnv(1/60)
 actions = [i for i in range(4)]
 done = False
 
-while not done:
-    state, reward, done = env.step(random.sample(actions, 1)[0])
+print(env.reset())
+# env.loop()
+
+
+def randMove():
+    while not done:
+        state, reward, done = env.step(random.sample(actions, 1)[0])
