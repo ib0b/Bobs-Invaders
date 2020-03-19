@@ -2,10 +2,19 @@ import math
 import random
 import numpy as np
 import pygame
+import math
 import time
-
+from gym import spaces
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
+# enemies
+NUM_ENEMIES = 30  # 30
+ENEMYBULLET_SPEED = 10  # 10
+ENEMYSPEED_X = 2  # 2
+ENEMYSPEED_Y = 20  # 20
+# player
+PLAYERSPEED_X = 10  # 10
+PLAYERBULLET_SPEED = 50  # 50
 
 
 class Player:
@@ -15,9 +24,21 @@ class Player:
         self.y = 480
         self.screen = screen
         self.width = self.img.get_size()[0]
+        self.height = self.img.get_size()[1]
+
+    def getCorner(self):
+        dis = abs((WINDOW_WIDTH/2) - (self.x+self.width))/(WINDOW_WIDTH/2)
+
+        dis = 0 if dis < 0.4 else dis-0.4
+
+        return dis
 
     def getShootPosX(self):
         return self.x + self.width/2.0
+
+    def getRect(self):
+         # Rect(left, top, width, height) -> Rect
+        return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def setPos(self, pos):
         self.x, self.y = pos
@@ -34,6 +55,8 @@ class Bullet:
         self.bulletImg = pygame.image.load('bullet.png')
         self.x = x
         self.y = y
+        self.height = self.bulletImg.get_size()[0]
+        self.width = self.bulletImg.get_size()[1]
         self.show = False
         self.screen = screen
         if(orientation == "down"):
@@ -45,6 +68,9 @@ class Bullet:
 
     def setPos(self, pos):
         self.x, self.y = pos
+
+    def getRect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def getState(self):
         show = 1 if self.show else 0
@@ -58,6 +84,10 @@ class Enemy:
         self.bulletImgXSize = self.bulletImg.get_size()[0]/2
         self.x = x
         self.y = y
+        self.width = self.enemyImg.get_size()[0]
+        self.height = self.enemyImg.get_size()[1]
+        self.col = 0
+        self.row = 0
         self.alive = True
         self.screen = screen
         self.draw()
@@ -66,19 +96,23 @@ class Enemy:
         alive = 1 if self.alive else 0
         return np.array([alive, self.x/WINDOW_WIDTH, self.y/WINDOW_HEIGHT])
 
-    def collided(self, bulletX, bulletY):
-        enemyCenterX = self.x+self.enemyImg.get_size()[0]/2
-        enemyCenterY = self.y+self.enemyImg.get_size()[1]/2
-        bulletCenterX = bulletX+self.bulletImgXSize/2
-        bulletCenterY = bulletY
+    def getRect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
 
-        distance = math.sqrt(math.pow(enemyCenterX - bulletCenterX, 2) +
-                             (math.pow(enemyCenterY - bulletCenterY, 2)))
+    def collided(self, playerBulletRect):
+        # enemyCenterX = self.x+self.enemyImg.get_size()[0]/2
+        # enemyCenterY = self.y+self.enemyImg.get_size()[1]/2
+        # bulletCenterX = bulletX+self.bulletImgXSize/2
+        # bulletCenterY = bulletY
+
+        # distance = math.sqrt(math.pow(enemyCenterX - bulletCenterX, 2) +
+        #                      (math.pow(enemyCenterY - bulletCenterY, 2)))
 
         # bullet bypass
         if(not self.alive):
             return False
-        if distance < self.enemyImg.get_size()[0]/2:
+        # check collision and kill enemy
+        if self.getRect().colliderect(playerBulletRect):
             self.alive = False
             return True
         else:
@@ -93,7 +127,7 @@ class Enemy:
 
 
 class EnemyBlock:
-    def __init__(self, screen, num, x=0, y=0, maxX=600, maxY=400):
+    def __init__(self, screen, num, x=0, y=0, maxX=600.0, maxY=400.0):
         self.enemyImg = pygame.image.load('enemy.png')
         self.enemyPointX = x
         self.enemyPointY = y
@@ -105,8 +139,8 @@ class EnemyBlock:
         bulletImg = pygame.image.load('bullet.png')
         self.enemyXsize = enemyImg.get_size()[0]
         self.enemyYsize = enemyImg.get_size()[1]
-        self.enemyXpad = 10 + self.enemyXsize
-        self.enemyYpad = 5 + self.enemyXsize
+        self.enemyXpad = 0 + self.enemyXsize
+        self.enemyYpad = 0 + self.enemyXsize
 
         self.blockStartX = 50
         self.blockStartY = 50
@@ -116,42 +150,55 @@ class EnemyBlock:
         self.maxX = maxX
         self.maxY = maxY
 
-        self.moveXSpeed = 2
-        self.moveYSpeed = 20
+        self.moveXSpeed = ENEMYSPEED_X
+        self.moveYSpeed = ENEMYSPEED_Y
         self.moveXVector = self.moveXSpeed
         self.moveYVector = self.moveYSpeed
         # enemy bullet
         self.enemyBullet = Bullet(self.screen, "down")
         self.enemyBulletSizeX = bulletImg.get_size()[1]
-        self.enemyBulletSpeed = 5
+        self.enemyBulletSpeed = ENEMYBULLET_SPEED
 
         self.creatEnemies()
+
+    def getDistanceFromEnd(self):
+        mostLeftX, mostRightX, mostBottomY = self.getEdges()
+        return (mostBottomY - self.blockStartY) / self.maxY
 
     def getState(self):
         state = np.array([])
         for i in range(self.num):
             state = np.append(state, self.enemies[i].getState())
+
         state = np.append(state, self.enemyBullet.getState())
         return state
 
     def shoot(self):
         # get bottom alive
+
         mostLeftX, mostRightX, mostBottomY = self.getEdges()
         bottomXs = []
-        for i in range(self.num):
-            if(self.enemies[i].y == mostBottomY and self.enemies[i].alive):
-                bottomXs.append(self.enemies[i].x+self.enemyXsize/2)
+        for i in range(self.numCols):
+            mb = 0
+            for j in range(self.numRows-1, -1, -1):
+
+                enemy = self.enemies[j*self.numCols+i-1]
+                if(enemy.alive and enemy.y > mb):
+                    mb = enemy.y
+                    bottomXs.append(
+                        (enemy.x+self.enemyXsize/2, enemy.y+self.enemyYsize))
+
         if(len(bottomXs) == 0):
             return
         try:
-            enemyBulletX = random.sample(bottomXs, 1)[0]
+            bulletSpawn = random.sample(bottomXs, 1)[0]
         except ValueError:
             print("Booom", len(bottomXs))
             raise Exception('spam', 'eggs')
         enemyBulletY = mostBottomY + self.enemyYsize
 
-        self.enemyBullet.x = enemyBulletX
-        self.enemyBullet.y = enemyBulletY
+        self.enemyBullet.x = bulletSpawn[0]
+        self.enemyBullet.y = bulletSpawn[1]
         self.enemyBullet.show = True
 
     def getEdges(self):
@@ -161,23 +208,30 @@ class EnemyBlock:
             if(self.enemies[i].alive):
                 if(self.enemies[i].x < mostLeftX):
                     mostLeftX = self.enemies[i].x
-                if(self.enemies[i].x > mostRightX):
+                if(self.enemies[i].x + self.enemyXsize > mostRightX):
                     mostRightX = self.enemies[i].x + self.enemyXsize
                 if(self.enemies[i].x > mostBottomY):
                     mostBottomY = self.enemies[i].y
 
         return mostLeftX, mostRightX, mostBottomY
 
-    def playerShot(self, x, y):
-        if(self.enemyBullet.y >= y-self.enemyBulletSizeX and self.enemyBullet.x < x + self.enemyBulletSizeX and self.enemyBullet.x > x):
+    def playerShot(self, playerRect):
+        if(playerRect.colliderect(self.enemyBullet.getRect())):
             print("mayday")
             return True
         return False
 
-    def checkCollisions(self, x, y):
+    def underBullet(self, playerRect):
+        if(not self.enemyBullet.show):
+            return False
+        if(playerRect.colliderect(pygame.Rect(self.enemyBullet.x, self.enemyBullet.y, self.enemyBullet.width, WINDOW_HEIGHT))):
+
+            return True
+
+    def checkCollisions(self, playerBulletRect):
         collided = False
         for i in range(self.num):
-            collided = self.enemies[i].collided(x, y)
+            collided = self.enemies[i].collided(playerBulletRect)
             if(collided):
                 break
         return collided
@@ -230,15 +284,26 @@ class EnemyBlock:
                 print("all dead")
 
     def creatEnemies(self):
-
+        self.numRows = 0
+        self.numCols = 0
+        col = 0
+        row = 0
         for i in range(self.num):
             enemy = Enemy(self.screen, self.enemyPointX +
                           self.anchorX, self.enemyPointY+self.anchorY)
+            enemy.col = col
+            enemy.row = row
+            col += 1
             self.enemies.append(enemy)
             self.enemyPointX += self.enemyXpad
+
             if(self.enemyPointX > self.maxX):
+                col = 0
+                row += 1
                 self.enemyPointX = 0
                 self.enemyPointY += self.enemyYpad
+                self.numRows += 1
+        self.numCols = math.ceil(self.num/self.numRows)
 
     def allDead(self):
         allDead = True
@@ -247,6 +312,12 @@ class EnemyBlock:
                 allDead = False
                 break
         return allDead
+
+    def checkBottom(self, player):
+        mostLeftX, mostRightX, mostBottomY = self.getEdges()
+        if(player.x < mostLeftX or player.x > mostRightX):
+            return False
+        return True
 
     def enemyInvasion(self):
         mostLeftX, mostRightX, mostBottomY = self.getEdges()
@@ -265,11 +336,33 @@ class GameEnv:
         self.gHeight = 600.0
         self.framerate = framerate
         self.enemyXSpeed = 0
+        self.observation_space = 89
+        self.num_envs = 1
+        self.action_space = spaces.Discrete(4)
+    # The observation will be the coordinate of the agent
+    # this can be described both by Discrete and Box space
+        self.observation_space = spaces.Box(low=0, high=98,
+                                            shape=(98,), dtype=np.float32)
+        self.reward_range = (0, 1)
+        self.metadata = []
         enemyImg = pygame.image.load('enemy.png')
         self.enemyXsize = enemyImg.get_size()[0]/2
         self.enemyYsize = enemyImg.get_size()[1]/2
 
         self.reset()
+        # abe rewards
+        self.stepReward = 0
+        self.playerShotReward = -1
+        self.enemyShotReward = 0.5
+        self.missedShotReward = 0
+        self.allDeadReward = 1
+        self.invasionReward = -0.5
+        self.bottomReward = 0
+        self.underReward = -0.01
+        self.anchorReward = -0.001
+        self.cornerReward = -0.001
+
+        self.discount = 1
 
     def getGameState(self):
         state = np.array([])
@@ -290,6 +383,8 @@ class GameEnv:
 
     def reset(self):
         pygame.init()
+
+        self.steps = 0
         print("game start")
         self.screen = pygame.display.set_mode(
             (int(self.gWidth), int(self.gHeight)))
@@ -308,15 +403,15 @@ class GameEnv:
         # Player
         self.player = Player(self.screen)
         self.playerXVector = 0
-        self.playerXSpeed = 5
+        self.playerXSpeed = PLAYERSPEED_X
 
         self.done = False
-        self.enemyBlock = EnemyBlock(self.screen, num=27, x=0, y=20)
+        self.enemyBlock = EnemyBlock(self.screen, num=NUM_ENEMIES, x=0, y=20)
 
         # Bullet
         self.playerBullet = Bullet(self.screen, y=480, x=0)
         self.bulletXSpeed = 0
-        self.bulletYSpeed = 50
+        self.bulletYSpeed = PLAYERBULLET_SPEED
 
         # Score
         self.score_value = 0
@@ -371,22 +466,23 @@ class GameEnv:
         #     running = False
 
     def step(self, action, finishGame=False):
-        reward = -0.001
+        # abcd
+        reward = self.stepReward
         win = 0
-        if(finishGame):
-            state = self.getGameState()
-            pygame.quit()
-            print("finish")
-            return state, 0, True
-        if(self.done):
-            print("game done")
-            state = self.getGameState()
-            pygame.quit()
-            print("game donedone")
-            return state, 0, True
+        self.steps += 1
+        # if(finishGame):
+        #     state = self.getGameState()
+        #     # pygame.quit()
+        #     print("finish")
+        #     return state, 0, True
+        # if(self.done):
+        #     print("game done")
+        #     state = self.getGameState()
+        #     # pygame.quit()
+        #     print("game donedone")
+        #     return state, 0, True
 
         pygame.event.pump()
-        self.screen.fill((0, 0, 0))
 
         if action == 1:
             self.playerXVector = -self.playerXSpeed
@@ -404,7 +500,8 @@ class GameEnv:
 
         self.screen.fill((0, 0, 0))
         # Background Image
-        #self.screen.blit(self.background, (0, 0))
+        if(self.framerate != 0):
+            self.screen.blit(self.background, (0, 0))
 
         # if keystroke is pressed check whether its right or left
 
@@ -420,55 +517,70 @@ class GameEnv:
         # enemyMovement
         self.enemyBlock.move()
         # check player collisions
-        playerShot = self.enemyBlock.playerShot(
-            self.player.x, self.player.y)
+        playerShot = self.enemyBlock.playerShot(self.player.getRect())
+        if(self.enemyBlock.underBullet(self.player.getRect())):
+            # check under
+            reward += self.underReward
         if(playerShot):
-            reward = -3
-            running = False
+            # abcd
+            reward += self.playerShotReward
+            win = -2
             self.done = True
-
-        collision = self.enemyBlock.checkCollisions(
-            self.playerBullet.x, self.playerBullet.y)
-        if collision:
-            # explosion# = mixer.Sound("explosion.wav")
-            # explosionSound.play()
-            self.playerBullet.y = self.player.y
-            self.playerBullet.show = False
-            reward = 3.0/self.enemyBlock.num
-            self.score_value += 1
+        # player bullet collision
+        if(self.playerBullet.show):
+            collision = self.enemyBlock.checkCollisions(
+                self.playerBullet.getRect())
+            if collision:
+                # explosion# = mixer.Sound("explosion.wav")
+                # explosionSound.play()
+                self.playerBullet.y = self.player.y
+                self.playerBullet.show = False
+                # abcd
+                reward += self.enemyShotReward * (self.discount**self.steps)
+                self.score_value += 1
 
         # # Bullet Movement
         if self.playerBullet.y <= 0:
             self.playerBullet.y = 480
             self.playerBullet.show = False
-
+            # abcd
+            reward += self.missedShotReward
         if self.playerBullet.show:
             self.playerBullet.y -= self.bulletYSpeed
-
+        reward += (self.enemyBlock.anchorY -
+                   self.enemyBlock.blockStartY)*self.anchorReward
         # gameover logic
         allDead = self.enemyBlock.allDead()
         invasion = False
         if(allDead):
-            reward = 3
+            # abcd
+            reward += self.allDeadReward * (self.discount**self.steps)
             running = False
             self.done = True
             win = 1
             print("gracefull win")
         else:
             invasion = self.enemyBlock.enemyInvasion()
+            # at bottom reward
 
         if(invasion):
             # invaded
             running = False
             self.done = True
+            win = -1
             print("gracefull lose")
-            reward = -3
-
+            # abcd
+            reward += self.invasionReward
+        else:
+            if(not self.enemyBlock.checkBottom(self.player)):
+                reward += self.bottomReward
         self.show_score(50, 50)
+
+        # cornerReward
+        reward += self.player.getCorner() * self.cornerReward
         if(self.framerate != 0):
             time.sleep(self.framerate)
         pygame.display.update()
-        if(self.done):
-            pygame.quit()
+
         self.totalReward += reward
         return self.getGameState(), reward, self.done, win
