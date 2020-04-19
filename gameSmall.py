@@ -4,34 +4,22 @@ import numpy as np
 import pygame
 import math
 import time
+import gym
 from gym import spaces
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
-IMAGES = False
-ST = 7
-# ST = 3
-
 # enemies
 NUM_ENEMIES = 30  # 30
 ENEMYBULLET_SPEED = 10  # 10
 ENEMYSPEED_X = 2  # 2
 ENEMYSPEED_Y = 20  # 20
-TARGET = "random"
-BULLET_FACTOR = 1
-
-VERBOSE = False
 # player
 PLAYERSPEED_X = 10  # 10
 PLAYERBULLET_SPEED = 50  # 50
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
-BLUE = (0, 110, 255)
-ROCKET = (100, 180, 255)
 
 
 class Player:
     def __init__(self, screen):
-
         self.img = pygame.image.load('player.png')
         self.x = 370
         self.y = 480
@@ -57,18 +45,14 @@ class Player:
         self.x, self.y = pos
 
     def draw(self):
-        if IMAGES:
-            self.screen.blit(self.img, (self.x, self.y))
-        else:
-            pygame.draw.rect(self.screen, GREEN, self.getRect())
+        self.screen.blit(self.img, (self.x, self.y))
 
     def getState(self):
-        return np.array([self.x/WINDOW_WIDTH*BULLET_FACTOR, (1-(self.x/WINDOW_WIDTH))*BULLET_FACTOR])
+        return np.array([self.x/WINDOW_WIDTH, self.y/WINDOW_HEIGHT])
 
 
 class Bullet:
     def __init__(self, screen, orientation="up", x=0, y=0):
-
         self.bulletImg = pygame.image.load('bullet.png')
         self.x = x
         self.y = y
@@ -76,18 +60,12 @@ class Bullet:
         self.width = self.bulletImg.get_size()[1]
         self.show = False
         self.screen = screen
-        self.orientation = orientation
         if(orientation == "down"):
             self.bulletImg = pygame.transform.flip(self.bulletImg, False, True)
 
     def draw(self):
         if(self.show):
-            if(IMAGES):
-                self.screen.blit(self.bulletImg, (self.x, self.y))
-            else:
-                pygame.draw.rect(self.screen, ROCKET, self.getRect())
-                if(self.orientation == "down"):
-                    pygame.draw.rect(self.screen, BLUE, self.getRect())
+            self.screen.blit(self.bulletImg, (self.x, self.y))
 
     def setPos(self, pos):
         self.x, self.y = pos
@@ -97,9 +75,7 @@ class Bullet:
 
     def getState(self):
         show = 1 if self.show else 0
-        if(self.orientation == "up"):
-            return np.array([show, self.x/WINDOW_WIDTH, self.y/WINDOW_HEIGHT])
-        return np.array([show*BULLET_FACTOR, self.x/WINDOW_WIDTH*BULLET_FACTOR, self.y/WINDOW_HEIGHT*BULLET_FACTOR])
+        return np.array([show, self.x/WINDOW_WIDTH, self.y/WINDOW_HEIGHT])
 
 
 class Enemy:
@@ -125,11 +101,19 @@ class Enemy:
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def collided(self, playerBulletRect):
+        # enemyCenterX = self.x+self.enemyImg.get_size()[0]/2
+        # enemyCenterY = self.y+self.enemyImg.get_size()[1]/2
+        # bulletCenterX = bulletX+self.bulletImgXSize/2
+        # bulletCenterY = bulletY
+
+        # distance = math.sqrt(math.pow(enemyCenterX - bulletCenterX, 2) +
+        #                      (math.pow(enemyCenterY - bulletCenterY, 2)))
+
+        # bullet bypass
         if(not self.alive):
             return False
         # check collision and kill enemy
         if self.getRect().colliderect(playerBulletRect):
-
             self.alive = False
             return True
         else:
@@ -137,20 +121,18 @@ class Enemy:
 
     def draw(self):
         if(self.alive):
-            if(IMAGES):
-                self.screen.blit(self.enemyImg, (self.x, self.y))
-            else:
-                pygame.draw.rect(self.screen, RED, self.getRect())
+            self.screen.blit(self.enemyImg, (self.x, self.y))
 
     def getPos(self):
         return self.x, self.y
 
 
 class EnemyBlock:
-    def __init__(self, screen, num, x=0, y=0, maxX=600.0, maxY=400.0):
+    def __init__(self, screen, num, x=0, y=0, maxX=600.0, maxY=400.0, verbose=False):
         self.enemyImg = pygame.image.load('enemy.png')
         self.enemyPointX = x
         self.enemyPointY = y
+        self.verbose = verbose
         self.alive = True
         self.screen = screen
         self.enemies = []
@@ -161,7 +143,7 @@ class EnemyBlock:
         self.enemyYsize = enemyImg.get_size()[1]
         self.enemyXpad = 0 + self.enemyXsize
         self.enemyYpad = 0 + self.enemyXsize
-        self.numDead = 0
+
         self.blockStartX = 50
         self.blockStartY = 50
 
@@ -187,13 +169,10 @@ class EnemyBlock:
 
     def getState(self):
         state = np.array([])
-        if(ST > 5):
-            for i in range(self.num):
-                state = np.append(state, self.enemies[i].getState())
-        if(ST >= 5):
-            state = np.append(state, self.getEdgesState())
-        if(ST > 3):
-            state = np.append(state, self.enemyBullet.getState())
+        # for i in range(self.num):
+        #     state = np.append(state, self.enemies[i].getState())
+
+        state = np.append(state, self.enemyBullet.getState())
         return state
 
     def shoot(self, player):
@@ -213,14 +192,10 @@ class EnemyBlock:
 
         if(len(bottomXs) == 0):
             return
-
         bulletSpawn = random.choice(bottomXs)
-
         enemyBulletY = mostBottomY + self.enemyYsize
-        if(TARGET == "player"):
-            self.enemyBullet.x = player.x
-        else:
-            self.enemyBullet.x = bulletSpawn[0]
+
+        self.enemyBullet.x = player.x
         self.enemyBullet.y = bulletSpawn[1]
         self.enemyBullet.show = True
 
@@ -238,13 +213,9 @@ class EnemyBlock:
 
         return mostLeftX, mostRightX, mostBottomY
 
-    def getEdgesState(self):
-        mostLeftX, mostRightX, mostBottomY = self.getEdges()
-        return np.array([mostLeftX/WINDOW_WIDTH, mostRightX/WINDOW_WIDTH])
-
     def playerShot(self, playerRect):
         if(playerRect.colliderect(self.enemyBullet.getRect())):
-            if VERBOSE:
+            if(self.verbose):
                 print("mayday")
             return True
         return False
@@ -255,14 +226,12 @@ class EnemyBlock:
         if(playerRect.colliderect(pygame.Rect(self.enemyBullet.x, self.enemyBullet.y, self.enemyBullet.width, WINDOW_HEIGHT))):
 
             return True
-        return False
 
     def checkCollisions(self, playerBulletRect):
         collided = False
         for i in range(self.num):
             collided = self.enemies[i].collided(playerBulletRect)
             if(collided):
-                self.numDead += 1
                 break
         return collided
 
@@ -292,6 +261,26 @@ class EnemyBlock:
             if(enemyPointX > self.maxX):
                 enemyPointX = 0
                 enemyPointY += self.enemyYpad
+
+        # move bullet
+        if(self.enemyBullet.show):
+            # moving bullet
+
+            self.enemyBullet.y += self.enemyBulletSpeed
+            self.enemyBullet.draw()
+            # check collisions with player
+
+            # check collision with game boundary
+            if(self.enemyBullet.y > 600):
+                self.enemyBullet.show = False
+
+        else:
+            # print("shoting")
+            if(not self.allDead()):
+                self.enemyBullet.show = True
+                self.shoot(player)
+            else:
+                print("all dead")
 
     def creatEnemies(self):
         self.numRows = 0
@@ -339,22 +328,22 @@ class EnemyBlock:
         return False
 
 
-class GameEnv:
+class GameEnv(gym.Env):
 
-    def __init__(self, framerate=0, verbose=False, graphics=True):
+    def __init__(self, framerate=0, gameMode="normal", verbose=False):
         self.gWidth = 800.0
         self.gHeight = 600.0
-        self.graphics = graphics
         self.framerate = framerate
         self.verbose = verbose
         self.enemyXSpeed = 0
         self.observation_space = 89
         self.num_envs = 1
+        self.gameMode = gameMode
         self.action_space = spaces.Discrete(4)
     # The observation will be the coordinate of the agent
     # this can be described both by Discrete and Box space
-        self.observation_space = spaces.Box(low=0, high=98,
-                                            shape=(98,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=0, high=1,
+                                            shape=(5,), dtype=np.float32)
         self.reward_range = (0, 1)
         self.metadata = []
         enemyImg = pygame.image.load('enemy.png')
@@ -364,44 +353,29 @@ class GameEnv:
         self.reset()
         # abe rewards
         self.stepReward = 0
-        self.enemyMissedReward = 0
-        self.playerShotReward = 0
-        self.enemyShotReward = 0
+        self.playerShotReward = -1
+        self.enemyShotReward = 0.5
         self.missedShotReward = 0
-        self.allDeadReward = 0
-        self.invasionReward = 0
+        self.allDeadReward = 1
+        self.invasionReward = -0.5
         self.bottomReward = 0
-        self.underReward = 0
-        self.anchorReward = 0
-        self.cornerReward = 0
-        self.bulletDistanceReward = 1
-        self.discount = 0
+        self.underReward = -0.01
+        self.anchorReward = -0.001
+        self.cornerReward = -0.001
 
-    def getImage(self):
-        window_pixel_matrix = pygame.surfarray.array3d(self.screen)
-        return window_pixel_matrix
+        self.discount = 1
 
     def getGameState(self):
-        if(ST == 7):
-            return self.getImage()
         state = np.array([])
         # enemy states
         enemyBlockState = self.enemyBlock.getState()
 
         state = np.append(state, enemyBlockState)
-        state = np.append(
-            state, [self.enemyBlock.underBullet(self.player.getRect())*1])
 
-        # playerBullet
-        bulletState = self.playerBullet.getState()
-        state = np.append(state, bulletState)
-        # add bullet distance state
-        eb = self.enemyBlock.enemyBullet
-        dis = 1
-        if(eb.show):
-            # bullet distance
-            dis = abs(eb.x-self.player.x)/WINDOW_WIDTH*BULLET_FACTOR
-        state = np.append(state, dis)
+        # # playerBullet
+        # bulletState = self.playerBullet.getState()
+        # state = np.append(state, bulletState)
+
         # playerstates
         playerState = self.player.getState()
         state = np.append(state, playerState)
@@ -412,7 +386,7 @@ class GameEnv:
         pygame.init()
 
         self.steps = 0
-        if(VERBOSE):
+        if(self.verbose):
             print("game start")
         self.screen = pygame.display.set_mode(
             (int(self.gWidth), int(self.gHeight)))
@@ -434,8 +408,8 @@ class GameEnv:
         self.playerXSpeed = PLAYERSPEED_X
 
         self.done = False
-        self.enemyBlock = EnemyBlock(self.screen, num=NUM_ENEMIES, x=0, y=20)
-        self.bullets = NUM_ENEMIES
+        self.enemyBlock = EnemyBlock(
+            self.screen, num=NUM_ENEMIES, x=0, y=20, verbose=self.verbose)
 
         # Bullet
         self.playerBullet = Bullet(self.screen, y=480, x=0)
@@ -451,13 +425,11 @@ class GameEnv:
         self.screen.blit(self.playerImg, (x, y))
 
     def show_score(self, x, y):
-        if(self.framerate != 0 and self.graphics):
-            score = self.font.render(f"Score : {self.steps} reward {self.totalReward}",
-                                     True, (255, 255, 255))
-            self.screen.blit(score, (x, y))
+        score = self.font.render(f"Score : {self.score_value} reward {self.totalReward}",
+                                 True, (255, 255, 255))
+        self.screen.blit(score, (x, y))
 
     def playerShoot(self):
-
         self.playerBullet.show = True
         self.playerBullet.setPos(self.player)
 
@@ -491,9 +463,8 @@ class GameEnv:
                 if event.type == pygame.QUIT:
                     running = False
             state, reward, done, win = self.step(action)
-            #print(np.round(state, 2))
             totalReward += reward
-        print(f"steps={self.steps} totalR={totalReward}", )
+        print("tpt", totalReward)
         # if(done):
         #     running = False
 
@@ -502,6 +473,18 @@ class GameEnv:
         reward = self.stepReward
         win = 0
         self.steps += 1
+        # if(finishGame):
+        #     state = self.getGameState()
+        #     # pygame.quit()
+        #     print("finish")
+        #     return state, 0, True
+        # if(self.done):
+        #     print("game done")
+        #     state = self.getGameState()
+        #     # pygame.quit()
+        #     print("game donedone")
+        #     return state, 0, True
+
         pygame.event.pump()
 
         if action == 1:
@@ -512,18 +495,15 @@ class GameEnv:
             if not self.playerBullet.show:
                 # Get the current x cordinate of the spaceship
 
-                if(self.bullets >= 0):
-                    self.bullets -= 1
-
-                    self.playerBullet.x = self.player.getShootPosX()
-                    self.playerBullet.show = True
+                self.playerBullet.x = self.player.getShootPosX()
+                self.playerBullet.show = True
 
         if action == 0:
             self.playerXVector = 0
 
         self.screen.fill((0, 0, 0))
         # Background Image
-        if(self.framerate != 0 and self.graphics):
+        if(self.framerate != 0):
             self.screen.blit(self.background, (0, 0))
 
         # if keystroke is pressed check whether its right or left
@@ -539,39 +519,11 @@ class GameEnv:
         self.playerBullet.draw()
         # enemyMovement
         self.enemyBlock.move(self.player)
-
-        # enemy bullet movement
-        # move bullet
-        if(self.enemyBlock.enemyBullet.show):
-            # moving bullet
-            self.enemyBlock.enemyBullet.y += ENEMYBULLET_SPEED
-            self.enemyBlock.enemyBullet.draw()
-            # check collision with game boundary
-            if(self.enemyBlock.enemyBullet.y > 600):
-                self.enemyBlock.enemyBullet.show = False
-                reward += self.enemyMissedReward
-        else:
-            # print("shoting")
-            if(not self.enemyBlock.allDead()):
-                self.enemyBlock.enemyBullet.show = True
-                self.enemyBlock.shoot(self.player)
-            else:
-                if VERBOSE:
-                    print("all dead")
         # check player collisions
         playerShot = self.enemyBlock.playerShot(self.player.getRect())
-        eb = self.enemyBlock.enemyBullet
-        if(eb.show):
-            # bullet distance
-            pass
         if(self.enemyBlock.underBullet(self.player.getRect())):
             # check under
             reward += self.underReward
-            dis = abs(eb.x+eb.width-self.player.x +
-                      self.player.width)/WINDOW_WIDTH
-            dis = 1-dis
-            # print("dis", dis)
-            reward += -dis*self.bulletDistanceReward
         if(playerShot):
             # abcd
             reward += self.playerShotReward
@@ -587,7 +539,7 @@ class GameEnv:
                 self.playerBullet.y = self.player.y
                 self.playerBullet.show = False
                 # abcd
-                reward += self.enemyShotReward
+                reward += self.enemyShotReward * (self.discount**self.steps)
                 self.score_value += 1
 
         # # Bullet Movement
@@ -636,4 +588,6 @@ class GameEnv:
         pygame.display.update()
 
         self.totalReward += reward
-        return self.getGameState(), reward, self.done, win
+        if(self.gameMode == "normal"):
+            return self.getGameState(), reward, self.done, win
+        return self.getGameState(), reward, self.done, {}
